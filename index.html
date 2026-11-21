@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Clima para la ruta</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f1a22">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;800&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE: directo, de calle, sin enredos
+   IDEA: el tablero de un casco/moto: un veredicto grande y claro
+   PICTURE: la tarjeta SÍ/NO con barras de lluvia por hora
+   COLOUR and TYPE: asfalto oscuro, cielo azul, amarillo de impermeable; Inter Tight
+   LAYOUT: veredicto arriba, horas, tormenta, zonas de la ruta */
+:root{color-scheme:light dark;--bg:light-dark(#eef3f7,#0f1a22);--card:light-dark(#fff,#18262f);--ink:light-dark(#0f1a22,#e8f0f5);--mut:light-dark(#5a6b77,#93a6b3);--line:light-dark(#d5dfe6,#29404d);--sky:#1f7ae0;--yes:#f5b800;--no:#1fa36b;--storm:#e5484d}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Inter,system-ui,sans-serif;overflow-x:clip}
+main{max-width:640px;margin:0 auto;padding:16px 16px 40px}
+h1{font:800 26px/1.1 'Inter Tight',sans-serif;margin:4px 0 2px}
+h2{font:600 19px/1.2 'Inter Tight',sans-serif;margin:24px 0 10px}
+.mut{color:var(--mut);font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px}
+.verdict{text-align:center;padding:26px 18px}
+.big{font:800 clamp(44px,14vw,72px)/1 'Inter Tight',sans-serif;margin:6px 0}
+.verdict.si .big{color:var(--yes)}.verdict.no .big{color:var(--no)}.verdict.quiza .big{color:var(--sky)}
+.pct{font:800 22px 'Inter Tight',sans-serif}
+.storm{display:none;background:var(--storm);color:#fff;border-radius:14px;padding:14px 16px;margin-top:12px;font-weight:600}
+.storm.on{display:block}
+.hours{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px}
+.h{flex:none;width:48px;text-align:center;font-size:13px}
+.bar{height:90px;background:light-dark(#e3ebf1,#223540);border-radius:8px;display:flex;align-items:flex-end;overflow:hidden;margin:4px 0}
+.bar i{display:block;width:100%;background:var(--sky)}
+.h.wet .bar i{background:var(--yes)}
+.row{display:flex;align-items:center;gap:10px;padding:12px 0;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.dot{width:12px;height:12px;border-radius:50%;flex:none;background:var(--mut)}
+.dot.si{background:var(--yes)}.dot.no{background:var(--no)}.dot.quiza{background:var(--sky)}
+.grow{flex:1}
+.nm{font-weight:600}
+button,select,input{font:16px Inter,sans-serif;min-height:44px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:0 14px}
+button{cursor:pointer;font-weight:600}
+button.pri{background:var(--sky);color:#fff;border-color:var(--sky)}
+button.x{min-height:36px;padding:0 10px;font-size:14px}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--yes);outline-offset:2px}
+.tools{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.tools>*{flex:1 1 160px}
+.msg{padding:10px 0;color:var(--mut);font-size:14px}
+.err{color:var(--storm)}
+@media(prefers-reduced-motion:no-preference){.bar i{transition:height .5s}}
+</style>
+</head>
+<body>
+<main>
+<h1>Clima para la ruta</h1>
+<div class="mut" id="upd">Cargando…</div>
+
+<h2 id="hereName">Donde está usted</h2>
+<div class="card verdict" id="verdict">
+  <div class="mut">¿Me mojo en las próximas 3 horas?</div>
+  <div class="big" id="vBig">…</div>
+  <div><span class="pct" id="vPct"></span> <span class="mut" id="vTxt"></span></div>
+  <div class="mut" id="vConf" style="margin-top:6px"></div>
+  <div class="mut" id="vNow" style="margin-top:6px"></div>
+</div>
+<div class="storm" id="storm"></div>
+
+<h2>Próximas 12 horas</h2>
+<div class="card"><div class="hours" id="hours"></div>
+<div class="mut">Barra = probabilidad de lluvia. Amarillo = se espera agua.</div></div>
+
+<h2>Mi ruta de hoy</h2>
+<div class="card" id="route"></div>
+<div class="tools">
+  <select id="zoneSel" aria-label="Agregar zona"></select>
+  <button id="addZone">Agregar zona</button>
+</div>
+<div class="tools">
+  <input id="gpsName" placeholder="Nombre (ej. Cliente La Espiga)" aria-label="Nombre del sitio">
+  <button id="addGps">Guardar dónde estoy</button>
+</div>
+
+<h2>Avisos</h2>
+<div class="card">
+  <div>La app se actualiza sola cada 15 minutos mientras esté abierta y le avisa (con vibración) si se viene agua o tormenta.</div>
+  <div class="tools"><button class="pri" id="notif">Activar avisos</button><button id="refresh">Actualizar ya</button></div>
+  <div class="msg" id="nMsg"></div>
+</div>
+
+<p class="mut">Ojo: ningún pronóstico es 100% seguro. Esta app compara 4 modelos del clima (europeo, gringo, alemán y canadiense) y le dice cuántos coinciden: entre más coincidan, más confiable el aviso. Datos de Open-Meteo.</p>
+</main>
+
+<script>
+{
+const ZONES=[["Centro",4.598,-74.076],["Chapinero",4.648,-74.062],["Usaquén",4.703,-74.030],["Suba",4.741,-74.084],["Engativá",4.708,-74.110],["Fontibón",4.678,-74.141],["Kennedy",4.628,-74.153],["Bosa",4.618,-74.190],["Ciudad Bolívar",4.560,-74.150],["Usme",4.507,-74.110],["San Cristóbal",4.555,-74.085],["Puente Aranda",4.615,-74.110],["Teusaquillo",4.635,-74.085],["Barrios Unidos",4.667,-74.075],["Rafael Uribe",4.575,-74.115],["Tunjuelito",4.580,-74.135],["Soacha",4.579,-74.217],["Chía",4.861,-74.058]];
+const MODELS=["ecmwf_ifs025","gfs_seamless","icon_seamless","gem_seamless"];
+const WET=0.3;
+const $=id=>document.getElementById(id);
+const load=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}};
+const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+let places=load("cr_places",[["Chapinero",4.648,-74.062],["Kennedy",4.628,-74.153]]);
+let lastAlert=load("cr_alert","");
+let here=null;
+
+$("zoneSel").innerHTML=ZONES.map((z,i)=>`<option value="${i}">${z[0]}</option>`).join("");
+
+const base="https://api.open-meteo.com/v1/forecast";
+async function getJSON(u){const r=await fetch(u);if(!r.ok)throw new Error(r.status);return r.json()}
+
+async function forecast(lat,lon){
+  const q=`latitude=${lat}&longitude=${lon}&timezone=America%2FBogota&forecast_days=2`;
+  const main=getJSON(`${base}?${q}&current=temperature_2m,precipitation,weather_code&hourly=precipitation_probability,precipitation,weather_code,cape&minutely_15=precipitation`);
+  const mods=Promise.allSettled(MODELS.map(m=>getJSON(`${base}?${q}&hourly=precipitation&models=${m}`)));
+  const [d,ms]=await Promise.all([main,mods]);
+  const start=d.current.time.slice(0,13)+":00";
+  let i0=d.hourly.time.findIndex(t=>t>=start);if(i0<0)i0=0;
+  const models=ms.filter(x=>x.status==="fulfilled").map(x=>{
+    const h=x.value.hourly;const k=Object.keys(h).find(k=>k.startsWith("precipitation"));
+    const j=h.time.findIndex(t=>t>=start);
+    return k&&j>=0?h[k].slice(j,j+12):null}).filter(a=>a&&a.some(v=>v!=null));
+  return {d,i0,models};
+}
+
+function analyze(f,span=3){
+  const {d,i0,models}=f,H=d.hourly;
+  const probs=H.precipitation_probability.slice(i0,i0+span).map(v=>v??0);
+  const prob=Math.max(...probs);
+  const agree=models.filter(m=>m.slice(0,span).some(v=>(v??0)>=WET)).length;
+  const n=models.length;
+  let v="no";
+  if(prob>=60&&agree>=Math.ceil(n/2))v="si";
+  else if(prob>=30||agree>=1)v="quiza";
+  // primera hora con lluvia en las próximas 12
+  let first=-1;
+  for(let k=0;k<12;k++){const p=H.precipitation_probability[i0+k]??0,mm=H.precipitation[i0+k]??0;if(p>=50||mm>=WET){first=k;break}}
+  // tormenta: códigos 95-99 o mucha energía (CAPE) con lluvia probable
+  let storm=-1;
+  for(let k=0;k<6;k++){const c=H.weather_code[i0+k],cape=H.cape?.[i0+k]??0,p=H.precipitation_probability[i0+k]??0;if(c>=95||(cape>=1500&&p>=50)){storm=k;break}}
+  return {v,prob,agree,n,first,storm};
+}
+
+const hourLabel=t=>{const h=+t.slice(11,13);return (h%12||12)+(h<12?" a.m.":" p.m.")};
+const VTXT={si:["SÍ","Llévese el impermeable"],quiza:["DE PRONTO","Cargue el impermeable por si acaso"],no:["NO","Tranquilo, no se ve agua"]};
+const whenTxt=(f,k)=>k<0?"Sin lluvia en 12 horas":k===0?"Lloviendo o lluvia ya":"Lluvia desde las "+hourLabel(f.d.hourly.time[f.i0+k]);
+
+function renderHere(name,f){
+  const a=analyze(f),d=f.d;
+  $("hereName").textContent=name;
+  $("verdict").className="card verdict "+a.v;
+  $("vBig").textContent=VTXT[a.v][0];
+  $("vPct").textContent=a.prob+"%";
+  $("vTxt").textContent=VTXT[a.v][1];
+  $("vConf").textContent=a.n?`${a.agree} de ${a.n} pronósticos ven lluvia en estas 3 horas`:"No se pudieron comparar modelos";
+  // próximos 60 min
+  const m=d.minutely_15;let nxt="";
+  if(m){const j=m.time.findIndex(t=>t>=d.current.time);if(j>=0){const s=m.precipitation.slice(j,j+4).reduce((x,y)=>x+(y??0),0);nxt=s>=0.2?` · Próxima hora: ${s.toFixed(1)} mm`:" · Próxima hora: seco"}}
+  $("vNow").textContent=`Ahora ${Math.round(d.current.temperature_2m)}°C`+((d.current.precipitation??0)>0?" · lloviendo":"")+nxt;
+  const st=$("storm");
+  if(a.storm>=0){st.className="storm on";st.textContent="⚡ Riesgo de tormenta eléctrica "+(a.storm===0?"ahora":"hacia las "+hourLabel(d.hourly.time[f.i0+a.storm]))+". Si puede, resguárdese y no se quede bajo árboles."}
+  else st.className="storm";
+  const H=d.hourly;
+  $("hours").innerHTML=Array.from({length:12},(_,k)=>{const i=f.i0+k,p=H.precipitation_probability[i]??0,mm=H.precipitation[i]??0;
+    return `<div class="h ${p>=50||mm>=WET?"wet":""}"><div>${p}%</div><div class="bar"><i style="height:${Math.max(p,3)}%"></i></div><div>${k===0?"Ahora":hourLabel(H.time[i])}</div></div>`}).join("");
+  return a;
+}
+
+async function renderRoute(){
+  const box=$("route");
+  if(!places.length){box.innerHTML='<div class="msg">Agregue las zonas o clientes de su ruta de hoy.</div>';return []}
+  box.innerHTML=places.map((p,i)=>`<div class="row" id="r${i}"><span class="dot"></span><div class="grow"><div class="nm">${p[0].replace(/</g,"&lt;")}</div><div class="mut">Consultando…</div></div><button class="x" data-del="${i}" aria-label="Quitar">Quitar</button></div>`).join("");
+  const res=await Promise.allSettled(places.map(p=>forecast(p[1],p[2])));
+  return res.map((r,i)=>{const row=$("r"+i);if(!row)return null;
+    if(r.status!=="fulfilled"){row.querySelector(".mut").innerHTML='<span class="err">No se pudo consultar</span>';return null}
+    const a=analyze(r.value);row.querySelector(".dot").className="dot "+a.v;
+    row.querySelector(".mut").textContent=`${VTXT[a.v][0]} · ${a.prob}% · ${whenTxt(r.value,a.first)}`+(a.storm>=0?" · ⚡ tormenta":"");
+    return {name:places[i][0],a}});
+}
+
+function alertIf(name,a){
+  if(a.v!=="si"&&a.storm<0)return;
+  const key=new Date().toISOString().slice(0,13)+name+a.v+a.storm;
+  if(key===lastAlert)return;lastAlert=key;save("cr_alert",key);
+  const body=a.storm>=0?`Riesgo de tormenta en ${name}`:`Se viene lluvia en ${name} (${a.prob}%)`;
+  try{navigator.vibrate&&navigator.vibrate([300,150,300])}catch(e){}
+  try{if("Notification"in window&&Notification.permission==="granted")new Notification("Clima para la ruta",{body})}catch(e){}
+}
+
+function getPos(){return new Promise((ok,no)=>{if(!navigator.geolocation)return no();navigator.geolocation.getCurrentPosition(p=>ok([p.coords.latitude,p.coords.longitude]),no,{enableHighAccuracy:true,timeout:10000,maximumAge:120000})})}
+
+async function refresh(){
+  $("upd").textContent="Actualizando…";
+  try{
+    let name="Donde está usted",lat,lon;
+    try{[lat,lon]=await getPos();here=[lat,lon]}catch(e){
+      const p=places[0]||ZONES[1];name=p[0]+" (sin GPS)";[lat,lon]=[p[1],p[2]]}
+    const f=await forecast(lat,lon);
+    const a=renderHere(name,f);alertIf("su ubicación",a);
+    const rs=await renderRoute();rs.forEach(r=>r&&alertIf(r.name,r.a));
+    $("upd").textContent="Actualizado a las "+new Date().toLocaleTimeString("es-CO",{hour:"numeric",minute:"2-digit"});
+  }catch(e){$("upd").innerHTML='<span class="err">No hay conexión o falló la consulta. Intente de nuevo.</span>'}
+}
+
+$("addZone").onclick=()=>{const z=ZONES[$("zoneSel").value];if(!places.some(p=>p[0]===z[0])){places.push(z);save("cr_places",places);renderRoute()}};
+$("addGps").onclick=async()=>{
+  try{const [la,lo]=await getPos();const n=$("gpsName").value.trim()||"Sitio "+(places.length+1);places.push([n,la,lo]);save("cr_places",places);$("gpsName").value="";renderRoute()}
+  catch(e){$("nMsg").textContent="No pude leer el GPS. Revise que la ubicación esté activada."}};
+$("route").onclick=e=>{const b=e.target.closest("[data-del]");if(b){places.splice(+b.dataset.del,1);save("cr_places",places);renderRoute()}};
+$("refresh").onclick=refresh;
+$("notif").onclick=async()=>{
+  if(!("Notification"in window)){$("nMsg").textContent="Este navegador no deja notificaciones; igual le vibra el celular con la app abierta.";return}
+  const r=await Notification.requestPermission();
+  $("nMsg").textContent=r==="granted"?"Listo, avisos activados.":"No dio permiso; puede activarlo en los ajustes del navegador."};
+
+if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+refresh();
+setInterval(refresh,15*60*1000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh()});
+}
+</script>
+</body>
+</html>
