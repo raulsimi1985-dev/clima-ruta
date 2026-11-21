@@ -24,6 +24,7 @@ h2{font:600 19px/1.2 'Inter Tight',sans-serif;margin:24px 0 10px}
 .big{font:800 clamp(44px,14vw,72px)/1 'Inter Tight',sans-serif;margin:6px 0}
 .si .big,.si.mbig{color:var(--yes)}.no .big,.no.mbig{color:var(--no)}.quiza .big,.quiza.mbig{color:var(--sky)}
 .pct{font:800 22px 'Inter Tight',sans-serif}
+.where{font-weight:600;margin:-4px 0 10px;color:var(--sky)}
 .esc{margin-top:12px;padding:10px 12px;border-radius:12px;background:light-dark(#e8f1fb,#14303f);font-weight:600}
 .storm{display:none;background:var(--storm);color:#fff;border-radius:14px;padding:14px 16px;margin-top:12px;font-weight:600}
 .storm.on{display:block}
@@ -73,6 +74,7 @@ details summary{cursor:pointer;padding:8px 0;font-weight:600}
 <div class="tools"><button class="pri" id="motoBtn">🏍️ Modo moto</button><button id="talk">🔊 Dígame el clima</button></div>
 
 <h2 id="hereName">Donde está usted</h2>
+<div class="where" id="where">📍 Buscando su ubicación…</div>
 <div class="card verdict" id="verdict">
   <div class="mut">¿Me mojo en las próximas 3 horas?</div>
   <div class="big" id="vBig">…</div>
@@ -147,7 +149,7 @@ const $=id=>document.getElementById(id);
 const load=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}};
 const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-let places=load("cr_places",[["Chapinero",4.648,-74.062],["Kennedy",4.628,-74.153]]);
+let places=load("cr_places",[]);
 let clients=load("cr_clients",[]);
 let lastAlert=load("cr_alert","");
 let voiceOn=load("cr_voice",true);
@@ -239,7 +241,7 @@ function renderHere(name,f){
   $("hours").innerHTML=Array.from({length:12},(_,k)=>{const i=f.i0+k,p=H.precipitation_probability[i]??0;
     return `<div class="h ${wetAt(H,i)?"wet":""}"><div>${p}%</div><div class="bar"><i style="height:${Math.max(p,3)}%"></i></div><div>${k===0?"Ahora":hourLabel(H.time[i])}</div></div>`}).join("");
   // modo moto
-  $("mPlace").textContent=name;
+  if(name!=="Donde está usted")$("mPlace").textContent=name;
   $("mBig").textContent=VTXT[a.v][0];$("mBig").className="mbig "+a.v;
   $("mLine").textContent=escText(a);
   $("mStorm").className="mstorm"+(a.storm>=0?" on":"");$("mStorm").textContent=a.storm>=0?"⚡ Riesgo de tormenta":"";
@@ -272,6 +274,19 @@ function alertIf(name,a){
 
 function getPos(){return new Promise((ok,no)=>{if(!navigator.geolocation)return no();navigator.geolocation.getCurrentPosition(p=>ok([p.coords.latitude,p.coords.longitude]),no,{enableHighAccuracy:true,timeout:10000,maximumAge:120000})})}
 
+let lastGeo=null;
+async function placeName(la,lo){
+  if(lastGeo&&Math.abs(lastGeo.la-la)<0.002&&Math.abs(lastGeo.lo-lo)<0.002)return lastGeo.txt;
+  try{
+    const j=await getJSON(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${la}&lon=${lo}&zoom=16&accept-language=es`);
+    const a=j.address||{};
+    const barrio=a.neighbourhood||a.suburb||a.quarter||a.residential||a.hamlet||"";
+    const loc=a.city_district||a.borough||a.county||"";
+    const city=a.city||a.town||a.village||"";
+    const txt=[barrio,loc&&loc!==barrio?loc:"",city].filter(Boolean).join(", ");
+    lastGeo={la,lo,txt};return txt;
+  }catch(e){return ""}
+}
 // ---------- pronóstico rápido para muchos puntos (mapa y clientes) ----------
 async function multi(pts,hours=12){
   const out=[];
@@ -306,7 +321,7 @@ function drawGrid(){
   const t=gridData[0].H.time[gridData[0].i0+k];
   $("mapHour").textContent=k===0?"Ahora":"A las "+hourLabel(t);
 }
-function setMe(){if(map&&here){if(meMark)meMark.setLatLng(here);else meMark=L.circleMarker(here,{radius:8,color:"#fff",weight:3,fillColor:"#1f7ae0",fillOpacity:1}).addTo(map).bindPopup("Usted está aquí")}}
+function setMe(){initMap();if(map&&here){if(meMark)meMark.setLatLng(here);else{meMark=L.circleMarker(here,{radius:9,color:"#fff",weight:3,fillColor:"#1f7ae0",fillOpacity:1,zIndexOffset:1000}).addTo(map).bindTooltip("Usted está aquí",{permanent:true,direction:"top",offset:[0,-8]});map.setView(here,13)}}}
 async function radar(on){
   clearInterval(radarTimer);radarLayers.forEach(l=>l.remove());radarLayers=[];
   if(!on||!map)return;
@@ -388,7 +403,11 @@ async function refresh(){
   $("upd").textContent="Actualizando…";
   try{
     let name="Donde está usted",lat,lon;
-    try{[lat,lon]=await getPos();here=[lat,lon]}catch(e){const p=places[0]||ZONES[1];name=p[0]+" (sin GPS)";[lat,lon]=[p[1],p[2]]}
+    let gps=true;
+    try{[lat,lon]=await getPos();here=[lat,lon]}catch(e){gps=false;const p=places[0]||ZONES[0];name=p[0]+" (sin GPS)";[lat,lon]=[p[1],p[2]]}
+    if(gps){$("where").textContent="📍 Buscando el nombre del barrio…";
+      placeName(lat,lon).then(t=>{const txt=t?"📍 Usted está en: "+t:`📍 Usted está en: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;$("where").textContent=txt;$("mPlace").textContent=t||"Donde está usted"})}
+    else $("where").innerHTML='<span class="err">📍 No pude leer su GPS. Revise que la ubicación del celular esté prendida y que la app tenga permiso.</span>';
     const f=await forecast(lat,lon);
     const a=renderHere(name,f);alertIf("su ubicación",a);
     setMe();
