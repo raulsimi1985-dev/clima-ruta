@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Clima para la ruta</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f1a22">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;800&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:light dark;--bg:light-dark(#eef3f7,#0f1a22);--card:light-dark(#fff,#18262f);--ink:light-dark(#0f1a22,#e8f0f5);--mut:light-dark(#5a6b77,#93a6b3);--line:light-dark(#d5dfe6,#29404d);--sky:#1f7ae0;--yes:#f5b800;--no:#1fa36b;--storm:#e5484d}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Inter,system-ui,sans-serif;overflow-x:clip}
+main{max-width:640px;margin:0 auto;padding:16px 16px 40px}
+h1{font:800 26px/1.1 'Inter Tight',sans-serif;margin:4px 0 2px}
+h2{font:600 19px/1.2 'Inter Tight',sans-serif;margin:24px 0 10px}
+.mut{color:var(--mut);font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px}
+.verdict{text-align:center;padding:24px 18px}
+.big{font:800 clamp(44px,14vw,72px)/1 'Inter Tight',sans-serif;margin:6px 0}
+.si .big,.si.mbig{color:var(--yes)}.no .big,.no.mbig{color:var(--no)}.quiza .big,.quiza.mbig{color:var(--sky)}
+.pct{font:800 22px 'Inter Tight',sans-serif}
+.where{font-weight:600;margin:-4px 0 10px;color:var(--sky)}
+.esc{margin-top:12px;padding:10px 12px;border-radius:12px;background:light-dark(#e8f1fb,#14303f);font-weight:600}
+.storm{display:none;background:var(--storm);color:#fff;border-radius:14px;padding:14px 16px;margin-top:12px;font-weight:600}
+.storm.on{display:block}
+.hours{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px}
+.h{flex:none;width:48px;text-align:center;font-size:13px}
+.bar{height:90px;background:light-dark(#e3ebf1,#223540);border-radius:8px;display:flex;align-items:flex-end;overflow:hidden;margin:4px 0}
+.bar i{display:block;width:100%;background:var(--sky)}
+.h.wet .bar i{background:var(--yes)}
+.row{display:flex;align-items:center;gap:10px;padding:12px 0;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.dot{width:12px;height:12px;border-radius:50%;flex:none;background:var(--mut)}
+.dot.si{background:var(--yes)}.dot.no{background:var(--no)}.dot.quiza{background:var(--sky)}
+.grow{flex:1}.nm{font-weight:600}
+button,select,input{font:16px Inter,sans-serif;min-height:44px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:0 14px}
+button{cursor:pointer;font-weight:600}
+button.pri{background:var(--sky);color:#fff;border-color:var(--sky)}
+button.x{min-height:36px;padding:0 10px;font-size:14px}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--yes);outline-offset:2px}
+.tools{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.tools>*{flex:1 1 140px}
+.msg{padding:10px 0;color:var(--mut);font-size:14px}
+.err{color:var(--storm)}
+.obsbig{font:800 22px/1.2 'Inter Tight',sans-serif}
+.obsbig.wet{color:var(--yes)}.obsbig.dry{color:var(--no)}
+#map{height:340px;border-radius:14px;overflow:hidden;background:#223540}
+.leg{display:flex;gap:12px;flex-wrap:wrap;font-size:13px;color:var(--mut);margin-top:8px}
+.leg b{display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:-1px;margin-right:4px}
+input[type=range]{width:100%;padding:0;border:0;background:none}
+.chk{display:flex;align-items:center;gap:10px;margin-top:10px}
+.chk input{min-height:24px;width:24px;height:24px}
+details summary{cursor:pointer;padding:8px 0;font-weight:600}
+#moto{display:none;position:fixed;inset:0;z-index:2000;background:#0b141a;color:#fff;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;gap:14px}
+#moto.on{display:flex}
+.mbig{font:800 min(38vw,200px)/1 'Inter Tight',sans-serif}
+.mline{font:600 clamp(22px,6.5vw,34px)/1.25 'Inter Tight',sans-serif;max-width:600px}
+.msub{font-size:20px;color:#a9bcc8}
+#moto .mstorm{background:var(--storm);border-radius:14px;padding:10px 16px;font-size:22px;font-weight:700;display:none}
+#moto .mstorm.on{display:block}
+#moto .mb{display:flex;gap:12px;width:100%;max-width:480px}
+#moto .mb button{flex:1;min-height:72px;font-size:22px;border-radius:18px;background:#1c2d38;color:#fff;border:0}
+#moto .mb button.pri{background:var(--sky)}
+@media(prefers-reduced-motion:no-preference){.bar i{transition:height .5s}}
+</style>
+</head>
+<body>
+<main>
+<h1>Clima para la ruta</h1>
+<div class="mut" id="upd">Cargando…</div>
+<div class="tools"><button class="pri" id="motoBtn">🏍️ Modo moto</button><button id="talk">🔊 Dígame el clima</button></div>
+
+<h2 id="hereName">Donde está usted</h2>
+<div class="where" id="where">📍 Buscando su ubicación…</div>
+<div class="card verdict" id="verdict">
+  <div class="mut">¿Me mojo en las próximas 3 horas?</div>
+  <div class="big" id="vBig">…</div>
+  <div><span class="pct" id="vPct"></span> <span class="mut" id="vTxt"></span></div>
+  <div class="esc" id="vEsc">…</div>
+  <div class="mut" id="vConf" style="margin-top:8px"></div>
+  <div class="mut" id="vNow" style="margin-top:4px"></div>
+</div>
+<div class="storm" id="storm"></div>
+
+<h2>Lluvia real ahora (Alcaldía)</h2>
+<div class="card" id="obs"><div class="msg">Consultando los pluviómetros del IDIGER…</div></div>
+
+<h2>Próximas 12 horas</h2>
+<div class="card"><div class="hours" id="hours"></div>
+<div class="mut">Barra = probabilidad de lluvia. Amarillo = se espera agua.</div></div>
+
+<h2>Mapa de lluvia en Bogotá</h2>
+<div class="card">
+  <div id="map"></div>
+  <div style="margin-top:12px"><b id="mapHour">Ahora</b> <span class="mut">· mueva la barra para ver para dónde va la lluvia</span></div>
+  <input type="range" id="slider" min="0" max="6" value="0" aria-label="Hora del mapa">
+  <div class="leg"><span>Círculos = pronóstico ·</span><span>▲ = pluviómetro de la Alcaldía (▲ azul lloviendo ya)</span></div>
+  <div class="leg"><span><b style="background:#1fa36b"></b>Seco</span><span><b style="background:#1f7ae0"></b>De pronto</span><span><b style="background:#f5b800"></b>Lluvia</span><span><b style="background:#e5484d"></b>Aguacero</span></div>
+  <label class="chk"><input type="checkbox" id="radarChk"> Ver radar en vivo (nubes reales de las últimas 2 horas)</label>
+  <div class="msg" id="mapMsg"></div>
+</div>
+
+<h2>Mi ruta de hoy</h2>
+<div class="card" id="route"></div>
+<div class="tools">
+  <select id="zoneSel" aria-label="Agregar zona"></select>
+  <button id="addZone">Agregar zona</button>
+</div>
+<div class="tools">
+  <input id="gpsName" placeholder="Nombre (ej. Cliente La Espiga)" aria-label="Nombre del sitio">
+  <button id="addGps">Guardar dónde estoy</button>
+</div>
+
+<h2>Clientes de Mi Ruta del Día</h2>
+<div class="card">
+  <div class="mut">Trae los clientes que tienen ubicación guardada en Mi Ruta del Día (en este mismo celular) y le marca a cuáles les va a caer agua, para que los deje para después.</div>
+  <div class="tools"><button class="pri" id="impBtn">Traer mis clientes</button></div>
+  <div id="cli"></div>
+</div>
+
+<h2>Avisos</h2>
+<div class="card">
+  <div>Se actualiza sola cada 15 minutos mientras la app esté abierta, y le vibra y le habla si se viene agua o tormenta.</div>
+  <label class="chk"><input type="checkbox" id="voiceChk"> Avisos en voz alta</label>
+  <div class="tools"><button class="pri" id="notif">Activar notificaciones</button><button id="refresh">Actualizar ya</button></div>
+  <div class="msg" id="nMsg"></div>
+</div>
+
+<p class="mut">Si está lloviendo o no AHORA lo dicen los 69 pluviómetros del Sistema de Alerta de Bogotá (SAB – IDIGER), que miden cada minuto. Ojo: ningún pronóstico es 100% seguro. La app compara 4 modelos del clima (europeo, gringo, alemán y canadiense) y le dice cuántos coinciden: entre más coincidan, más confiable. Datos de Open-Meteo; radar de RainViewer; mapa de OpenStreetMap.</p>
+</main>
+
+<div id="moto" role="dialog" aria-label="Modo moto">
+  <div class="msub" id="mPlace">Donde está usted</div>
+  <div class="mbig" id="mBig">…</div>
+  <div class="mline" id="mLine"></div>
+  <div class="mstorm" id="mStorm"></div>
+  <div class="msub" id="mSub"></div>
+  <div class="mb"><button class="pri" id="mTalk">🔊 Hablar</button><button id="mExit">Salir</button></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+{
+const ZONES=[["Centro",4.598,-74.076],["Chapinero",4.648,-74.062],["Usaquén",4.703,-74.030],["Suba",4.741,-74.084],["Engativá",4.708,-74.110],["Fontibón",4.678,-74.141],["Kennedy",4.628,-74.153],["Bosa",4.618,-74.190],["Ciudad Bolívar",4.560,-74.150],["Usme",4.507,-74.110],["San Cristóbal",4.555,-74.085],["Puente Aranda",4.615,-74.110],["Teusaquillo",4.635,-74.085],["Barrios Unidos",4.667,-74.075],["Rafael Uribe",4.575,-74.115],["Tunjuelito",4.580,-74.135],["Soacha",4.579,-74.217],["Chía",4.861,-74.058]];
+const MODELS=["ecmwf_ifs025","gfs_seamless","icon_seamless","gem_seamless"];
+const WET=0.3;
+const base="https://api.open-meteo.com/v1/forecast";
+const TZ="timezone=America%2FBogota";
+const $=id=>document.getElementById(id);
+const load=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}};
+const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let places=load("cr_places",[]);
+let clients=load("cr_clients",[]);
+let lastAlert=load("cr_alert","");
+let voiceOn=load("cr_voice",true);
+let here=null,hereRes=null;
+
+$("zoneSel").innerHTML=ZONES.map((z,i)=>`<option value="${i}">${z[0]}</option>`).join("");
+$("voiceChk").checked=voiceOn;
+
+const nowHour=()=>new Date().toLocaleString("sv-SE",{timeZone:"America/Bogota"}).replace(" ","T").slice(0,13)+":00";
+const hourLabel=t=>{const h=+t.slice(11,13);return (h%12||12)+(h<12?" a.m.":" p.m.")};
+const hourSay=t=>{const h=+t.slice(11,13);return (h%12||12)+(h<12?" de la mañana":h<19?" de la tarde":" de la noche")};
+async function getJSON(u){const r=await fetch(u);if(!r.ok)throw new Error(r.status);return r.json()}
+
+async function forecast(lat,lon){
+  const q=`latitude=${lat}&longitude=${lon}&${TZ}&forecast_days=2`;
+  const main=getJSON(`${base}?${q}&current=temperature_2m,precipitation,weather_code&hourly=precipitation_probability,precipitation,weather_code,cape`);
+  const mods=Promise.allSettled(MODELS.map(m=>getJSON(`${base}?${q}&hourly=precipitation&models=${m}`)));
+  const [d,ms]=await Promise.all([main,mods]);
+  const start=d.current.time.slice(0,13)+":00";
+  let i0=d.hourly.time.findIndex(t=>t>=start);if(i0<0)i0=0;
+  const models=ms.filter(x=>x.status==="fulfilled").map(x=>{
+    const h=x.value.hourly;const k=Object.keys(h).find(k=>k.startsWith("precipitation"));
+    const j=h.time.findIndex(t=>t>=start);
+    return k&&j>=0?h[k].slice(j,j+12):null}).filter(a=>a&&a.some(v=>v!=null));
+  return {d,i0,models};
+}
+
+// ---------- lluvia REAL: pluviómetros del SAB (IDIGER, Alcaldía) ----------
+const SAB="https://app.sab.gov.co/sab/ServletTipoSensores?idtiposensor=5";
+const PROXIES=[u=>u,u=>"https://corsproxy.io/?url="+encodeURIComponent(u),u=>"https://api.allorigins.win/raw?url="+encodeURIComponent(u),u=>"https://api.codetabs.com/v1/proxy?quest="+encodeURIComponent(u)];
+let proxyOk=load("cr_proxy",0),sabCache=null,sabT=0;
+let sabHist=load("cr_sabhist",{});
+async function fetchT(u,ms=9000){const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);try{const r=await fetch(u,{signal:c.signal,cache:"no-store"});if(!r.ok)throw new Error(r.status);return await r.json()}finally{clearTimeout(t)}}
+const sabDate=s=>new Date(String(s).replace(" ","T").slice(0,19)+"-05:00").getTime();
+async function sab(){
+  if(sabCache&&Date.now()-sabT<90000)return sabCache;
+  const order=[proxyOk,...PROXIES.keys()].filter((v,i,a)=>a.indexOf(v)===i);
+  let j=null;
+  for(const i of order){try{j=await fetchT(PROXIES[i](SAB));if(j&&j.TipoSensores){proxyOk=i;save("cr_proxy",i);break}}catch(e){}j=null}
+  if(!j)throw new Error("sab");
+  const now=Date.now();
+  const st=j.TipoSensores.filter(x=>x.VISIBLE!==0&&isFinite(x.LATITUD)&&isFinite(x.LONGITUD)).map(x=>{
+    const t=sabDate(x.FECHALECTURA),acum=+x.ACUMULADODIA||0,last=+x.VALORLECTURA||0,id=String(x.IDESTACION);
+    // historial para saber si el acumulado subió en los últimos 15 minutos
+    const h=(sabHist[id]||[]).filter(p=>now-p[0]<60*60000&&p[1]<=acum);
+    if(!h.length||h[h.length-1][1]!==acum||now-h[h.length-1][0]>4*60000)h.push([now,acum]);
+    sabHist[id]=h.slice(-30);
+    const old=h.find(p=>now-p[0]<=16*60000);
+    const sube=old?+(acum-old[1]).toFixed(1):0;
+    const fresh=now-t<40*60000;
+    return {id,nm:x.ESTACION,loc:x.LOCALIDAD,la:+x.LATITUD,lo:+x.LONGITUD,acum,last,t,fresh,sube,wet:fresh&&(last>0||sube>0)}});
+  save("cr_sabhist",sabHist);
+  sabCache=st;sabT=now;return st;
+}
+function km(a,b,c,d){const r=Math.PI/180,x=(d-b)*r*Math.cos((a+c)/2*r),y=(c-a)*r;return 6371*Math.hypot(x,y)}
+// ¿está lloviendo cerca de este punto? mira las estaciones a menos de 3,5 km
+function obsAt(st,la,lo){
+  if(!st)return null;
+  const near=st.filter(s=>s.fresh).map(s=>({...s,d:km(la,lo,s.la,s.lo)})).sort((a,b)=>a.d-b.d);
+  if(!near.length||near[0].d>8)return null;
+  const close=near.filter(s=>s.d<=3.5).slice(0,3);
+  const use=close.length?close:[near[0]];
+  const wet=use.filter(s=>s.wet);
+  return {raining:wet.length>0,near:near[0],wet,use,far:!close.length};
+}
+const kmTxt=d=>d<1?Math.round(d*1000)+" m":d.toFixed(1).replace(".",",")+" km";
+const mm=v=>String(v.toFixed(1)).replace(".",",")+" mm";
+function renderObs(o,st){
+  const box=$("obs");
+  if(!st){box.innerHTML='<div class="msg err">No pude leer los pluviómetros de la Alcaldía en este momento. Mientras tanto uso solo el pronóstico.</div>';return}
+  const lloviendo=st.filter(s=>s.wet);
+  const city=lloviendo.length?`En Bogotá está lloviendo en ${lloviendo.length} de ${st.length} estaciones: ${lloviendo.slice(0,5).map(s=>esc(s.nm)).join(", ")}${lloviendo.length>5?"…":""}.`:`Ninguna de las ${st.length} estaciones de Bogotá registra lluvia en este momento.`;
+  if(!o){box.innerHTML=`<div class="mut">${city}</div>`;return}
+  const n=o.near;
+  const hora=new Date(n.t).toLocaleTimeString("es-CO",{hour:"numeric",minute:"2-digit"});
+  box.innerHTML=`<div class="obsbig ${o.raining?"wet":"dry"}">${o.raining?"☔ Está lloviendo cerca":"✅ No está lloviendo cerca"}</div>`+
+    `<div style="margin-top:6px">Estación más cercana: <b>${esc(n.nm)}</b> (${esc(n.loc||"")}), a ${kmTxt(n.d)}.</div>`+
+    `<div class="mut">${o.raining?`Lluvia en: ${o.wet.map(s=>esc(s.nm)+(s.sube>0?" (+"+mm(s.sube)+" en 15 min)":"")).join(", ")}`:"Sin agua en el último rato"} · hoy lleva ${mm(n.acum)} · lectura de las ${hora}</div>`+
+    (o.far?'<div class="mut">Ojo: no hay estación muy cerca de usted, la más próxima queda algo lejos.</div>':"")+
+    `<div class="mut" style="margin-top:8px">${city}</div>`;
+}
+
+// lluvia por hora: ¿se espera agua en la hora k?
+const wetAt=(H,i)=>(H.precipitation_probability[i]??0)>=50||(H.precipitation[i]??0)>=WET;
+
+function timing(H,i0,nowWet){
+  // devuelve inicio y fin (escampa) de la próxima lluvia en 12 h
+  let s=nowWet?0:-1;
+  if(s<0&&wetAt(H,i0))s=0.5; // seco ahora pero puede caer en esta misma hora
+  if(s<0)for(let k=1;k<12;k++)if(wetAt(H,i0+k)){s=k;break}
+  if(s<0)return {s:-1,e:-1};
+  let e=-1;for(let k=Math.max(Math.ceil(s),1);k<12;k++)if(!wetAt(H,i0+k)){e=k;break}
+  return {s,e};
+}
+
+function analyze(f,span=3,obs=null){
+  const {d,i0,models}=f,H=d.hourly;
+  const prob=Math.max(...H.precipitation_probability.slice(i0,i0+span).map(v=>v??0));
+  const agree=models.filter(m=>m.slice(0,span).some(v=>(v??0)>=WET)).length;
+  const n=models.length;
+  let v="no";
+  if(prob>=60&&agree>=Math.ceil(n/2))v="si";else if(prob>=30||agree>=1)v="quiza";
+  // "está lloviendo" SOLO si lo dicen los pluviómetros (o, sin ellos, la medición actual del modelo), nunca por probabilidad
+  const raining=obs?obs.raining:(d.current?.precipitation??0)>0;
+  if(raining)v="si";
+  const t=timing(H,i0,raining);
+  let storm=-1;
+  for(let k=0;k<6;k++){const c=H.weather_code[i0+k],cape=H.cape?.[i0+k]??0,p=H.precipitation_probability[i0+k]??0;if(c>=95||(cape>=1500&&p>=50)){storm=k;break}}
+  return {v,prob,agree,n,raining,storm,...t,lbl:k=>hourLabel(H.time[i0+k]),say:k=>hourSay(H.time[i0+k])};
+}
+
+function escText(a){
+  if(!a.raining&&a.s===0.5)return "Seco ahora · puede caer agua en el transcurso de esta hora"+(a.e<0?"":` · escampa hacia las ${a.lbl(a.e)}`);
+  if(a.raining)return a.e<0?"Está lloviendo y no escampa en las próximas 12 horas":`Está lloviendo · escampa hacia las ${a.lbl(a.e)}`;
+  if(a.s<0)return "Seco por ahora · no se ve agua en 12 horas";
+  return `Llueve desde las ${a.lbl(a.s)}`+(a.e<0?" y no escampa en 12 horas":` · escampa hacia las ${a.lbl(a.e)}`);
+}
+function sayText(name,a){
+  let t=`Parcero, en ${name}: `;
+  if(!a.raining&&a.s===0.5)t+="ahorita está seco, pero puede caer agua en esta hora. ";
+  else if(a.raining)t+=a.e<0?"está lloviendo y no escampa pronto. ":`está lloviendo, escampa más o menos a las ${a.say(a.e)}. `;
+  else if(a.s<0)t+="tranquilo, no se ve agua en las próximas horas. ";
+  else t+=`va a llover desde las ${a.say(a.s)}`+(a.e<0?". ":`, y escampa hacia las ${a.say(a.e)}. `);
+  if(a.storm>=0)t+="Ojo, hay riesgo de tormenta eléctrica. ";
+  if(a.obsNm)t+=a.raining?`Lo confirma la estación ${a.obsNm} de la Alcaldía. `:`La estación ${a.obsNm} de la Alcaldía no registra lluvia. `;
+  return t;
+}
+
+function speak(t){
+  try{if(!("speechSynthesis"in window))return;speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(t);u.lang="es-CO";
+    const vs=speechSynthesis.getVoices(),v=vs.find(v=>v.lang==="es-CO")||vs.find(v=>v.lang==="es-US"||v.lang==="es-MX")||vs.find(v=>v.lang.startsWith("es"));
+    if(v)u.voice=v;u.rate=1;speechSynthesis.speak(u)}catch(e){}
+}
+
+const VTXT={si:["SÍ","Llévese el impermeable"],quiza:["DE PRONTO","Cargue el impermeable por si acaso"],no:["NO","Tranquilo, no se ve agua"]};
+
+function renderHere(name,f,obs){
+  const a=analyze(f,3,obs),d=f.d,H=d.hourly;
+  a.obsNm=obs?obs.near.nm:"";
+  $("hereName").textContent=name;
+  $("verdict").className="card verdict "+a.v;
+  $("vBig").textContent=VTXT[a.v][0];
+  $("vPct").textContent=a.prob+"%";
+  $("vTxt").textContent=VTXT[a.v][1];
+  $("vEsc").textContent=escText(a);
+  $("vConf").textContent=a.n?`${a.agree} de ${a.n} pronósticos ven lluvia en estas 3 horas`:"No se pudieron comparar modelos";
+  $("vNow").textContent=`Ahora ${Math.round(d.current.temperature_2m)}°C`+(a.raining?" · lloviendo (medido)":obs?" · seco (medido)":"");
+  const stTxt=a.storm>=0?"⚡ Riesgo de tormenta eléctrica "+(a.storm===0?"ahora":"hacia las "+a.lbl(a.storm))+". Si puede, resguárdese y no se quede bajo árboles.":"";
+  $("storm").className="storm"+(stTxt?" on":"");$("storm").textContent=stTxt;
+  $("hours").innerHTML=Array.from({length:12},(_,k)=>{const i=f.i0+k,p=H.precipitation_probability[i]??0;
+    return `<div class="h ${wetAt(H,i)?"wet":""}"><div>${p}%</div><div class="bar"><i style="height:${Math.max(p,3)}%"></i></div><div>${k===0?"Esta hora":hourLabel(H.time[i])}</div></div>`}).join("");
+  // modo moto
+  if(name!=="Donde está usted")$("mPlace").textContent=name;
+  $("mBig").textContent=VTXT[a.v][0];$("mBig").className="mbig "+a.v;
+  $("mLine").textContent=escText(a);
+  $("mStorm").className="mstorm"+(a.storm>=0?" on":"");$("mStorm").textContent=a.storm>=0?"⚡ Riesgo de tormenta":"";
+  $("mSub").textContent=`${a.prob}% · ${Math.round(d.current.temperature_2m)}°C · actualizado ${new Date().toLocaleTimeString("es-CO",{hour:"numeric",minute:"2-digit"})}`;
+  hereRes={name,a};
+  return a;
+}
+
+async function renderRoute(){
+  const box=$("route");
+  if(!places.length){box.innerHTML='<div class="msg">Agregue las zonas o sitios de su ruta de hoy.</div>';return []}
+  box.innerHTML=places.map((p,i)=>`<div class="row" id="r${i}"><span class="dot"></span><div class="grow"><div class="nm">${esc(p[0])}</div><div class="mut">Consultando…</div></div><button class="x" data-del="${i}" aria-label="Quitar">Quitar</button></div>`).join("");
+  const res=await Promise.allSettled(places.map(p=>forecast(p[1],p[2])));
+  return res.map((r,i)=>{const row=$("r"+i);if(!row)return null;
+    if(r.status!=="fulfilled"){row.querySelector(".mut").innerHTML='<span class="err">No se pudo consultar</span>';return null}
+    const a=analyze(r.value,3,obsAt(sabCache,places[i][1],places[i][2]));row.querySelector(".dot").className="dot "+a.v;
+    row.querySelector(".mut").textContent=`${VTXT[a.v][0]} · ${a.prob}% · ${escText(a)}`+(a.storm>=0?" · ⚡ tormenta":"");
+    return {name:places[i][0],a}});
+}
+
+function alertIf(name,a){
+  if(a.v!=="si"&&a.storm<0)return;
+  const key=nowHour()+name+a.v+a.storm+(a.raining?"R":"");
+  if(key===lastAlert)return;lastAlert=key;save("cr_alert",key);
+  const body=a.storm>=0?`Riesgo de tormenta en ${name}`:a.raining?`Está lloviendo en ${name} (medido por la Alcaldía)`:`Se viene lluvia en ${name} (${a.prob}%)`;
+  try{navigator.vibrate&&navigator.vibrate([300,150,300])}catch(e){}
+  try{if("Notification"in window&&Notification.permission==="granted")new Notification("Clima para la ruta",{body,icon:"icon-192.png"})}catch(e){}
+  if(voiceOn)speak(sayText(name,a));
+}
+
+function getPos(){return new Promise((ok,no)=>{if(!navigator.geolocation)return no();navigator.geolocation.getCurrentPosition(p=>ok([p.coords.latitude,p.coords.longitude]),no,{enableHighAccuracy:true,timeout:10000,maximumAge:120000})})}
+
+let lastGeo=null;
+async function placeName(la,lo){
+  if(lastGeo&&Math.abs(lastGeo.la-la)<0.002&&Math.abs(lastGeo.lo-lo)<0.002)return lastGeo.txt;
+  try{
+    const j=await getJSON(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${la}&lon=${lo}&zoom=16&accept-language=es`);
+    const a=j.address||{};
+    const barrio=a.neighbourhood||a.suburb||a.quarter||a.residential||a.hamlet||"";
+    const loc=a.city_district||a.borough||a.county||"";
+    const city=a.city||a.town||a.village||"";
+    const txt=[barrio,loc&&loc!==barrio?loc:"",city].filter(Boolean).join(", ");
+    lastGeo={la,lo,txt};return txt;
+  }catch(e){return ""}
+}
+// ---------- pronóstico rápido para muchos puntos (mapa y clientes) ----------
+async function multi(pts,hours=12){
+  const out=[];
+  for(let c=0;c<pts.length;c+=40){
+    const ch=pts.slice(c,c+40);
+    const j=await getJSON(`${base}?latitude=${ch.map(p=>p[0].toFixed(3)).join(",")}&longitude=${ch.map(p=>p[1].toFixed(3)).join(",")}&hourly=precipitation_probability,precipitation&${TZ}&forecast_days=2`);
+    const arr=Array.isArray(j)?j:[j];
+    arr.forEach(r=>{const H=r.hourly;let i0=H.time.findIndex(t=>t>=nowHour());if(i0<0)i0=0;out.push({H,i0})});
+  }
+  return out;
+}
+
+// ---------- mapa ----------
+let map=null,circles=[],gridData=null,gridPts=[],meMark=null,radarLayers=[],radarTimer=null;
+const colorFor=(p,mm)=>mm>=2.5?"#e5484d":p>=50||mm>=WET?"#f5b800":p>=30?"#1f7ae0":"#1fa36b";
+function initMap(){
+  if(map||typeof L==="undefined"){if(typeof L==="undefined")$("mapMsg").textContent="El mapa no cargó. Revise la conexión.";return}
+  map=L.map("map",{zoomControl:true,attributionControl:true}).setView([4.65,-74.1],11);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:17,attribution:"© OpenStreetMap"}).addTo(map);
+  for(let la=4.48;la<=4.80;la+=0.04)for(let lo=-74.22;lo<=-74.02;lo+=0.04)gridPts.push([la,lo]);
+}
+async function loadGrid(){
+  initMap();if(!map)return;
+  try{gridData=await multi(gridPts);drawGrid()}catch(e){$("mapMsg").textContent="No se pudo cargar la lluvia del mapa."}
+}
+function drawGrid(){
+  if(!map||!gridData)return;
+  const k=+$("slider").value;
+  circles.forEach(c=>c.remove());circles=[];
+  gridData.forEach((g,i)=>{const p=g.H.precipitation_probability[g.i0+k]??0,mm=g.H.precipitation[g.i0+k]??0;
+    circles.push(L.circle(gridPts[i],{radius:2100,stroke:false,fillColor:colorFor(p,mm),fillOpacity:.45}).bindPopup(`${p}% · ${mm.toFixed(1)} mm`).addTo(map))});
+  const t=gridData[0].H.time[gridData[0].i0+k];
+  $("mapHour").textContent=k===0?"Ahora":"A las "+hourLabel(t);
+}
+let stLayer=null;
+function drawStations(st){
+  initMap();if(!map||!st)return;
+  if(stLayer)stLayer.remove();
+  stLayer=L.layerGroup(st.map(s=>{
+    const c=!s.fresh?"#888":s.wet?"#1fd0ff":s.acum>0?"#7fb3d5":"#9aa5ad";
+    const ic=L.divIcon({className:"",html:`<svg width="18" height="16" viewBox="0 0 18 16"><path d="M9 1L17 15H1Z" fill="${c}" stroke="#222" stroke-width="1.5"/></svg>`,iconSize:[18,16],iconAnchor:[9,15]});
+    return L.marker([s.la,s.lo],{icon:ic,zIndexOffset:500}).bindPopup(`<b>${esc(s.nm)}</b><br>${s.wet?"☔ Lloviendo":"Sin lluvia ahora"}<br>Hoy: ${mm(s.acum)}`)})).addTo(map);
+}
+function setMe(){initMap();if(map&&here){if(meMark)meMark.setLatLng(here);else{meMark=L.circleMarker(here,{radius:9,color:"#fff",weight:3,fillColor:"#1f7ae0",fillOpacity:1,zIndexOffset:1000}).addTo(map).bindTooltip("Usted está aquí",{permanent:true,direction:"top",offset:[0,-8]});map.setView(here,13)}}}
+async function radar(on){
+  clearInterval(radarTimer);radarLayers.forEach(l=>l.remove());radarLayers=[];
+  if(!on||!map)return;
+  $("mapMsg").textContent="Cargando radar…";
+  try{
+    const j=await getJSON("https://api.rainviewer.com/public/weather-maps.json");
+    const fr=(j.radar?.past||[]).slice(-8);
+    if(!fr.length)throw 0;
+    radarLayers=fr.map(f=>L.tileLayer(`${j.host}${f.path}/256/{z}/{x}/{y}/2/1_1.png`,{opacity:0,maxNativeZoom:7,maxZoom:17,zIndex:5}).addTo(map));
+    let i=0;const show=()=>{radarLayers.forEach((l,n)=>l.setOpacity(n===i?.65:0));
+      const t=new Date(fr[i].time*1000).toLocaleTimeString("es-CO",{hour:"numeric",minute:"2-digit"});
+      $("mapMsg").textContent=`Radar de las ${t}. Si no ve manchas, es porque no hay lluvia o el radar no alcanza a cubrir la zona.`;i=(i+1)%fr.length};
+    show();radarTimer=setInterval(show,900);
+  }catch(e){$("mapMsg").textContent="El radar en vivo no está disponible ahora. Los círculos de colores sí funcionan."}
+}
+
+// ---------- clientes de Mi Ruta del Día ----------
+const NUMRE=/(-?\d{1,2}\.\d{3,})\s*,\s*(-?\d{2,3}\.\d{3,})/;
+const okLL=(la,lo)=>la>-5&&la<14&&lo>-82&&lo<-66;
+function findClients(){
+  const found=[],seen=new Set();
+  const pick=(o,k)=>{for(const n of k)if(o[n]!=null&&o[n]!=="")return o[n]};
+  const walk=(o,depth)=>{
+    if(!o||depth>6)return;
+    if(Array.isArray(o)){o.forEach(x=>walk(x,depth+1));return}
+    if(typeof o!=="object")return;
+    let la=parseFloat(pick(o,["lat","latitud","latitude","Lat"])),lo=parseFloat(pick(o,["lng","lon","long","longitud","longitude","Lng"]));
+    if(!(okLL(la,lo))){
+      const loc=o.ubicacion||o.location||o.coords||o.pos||o.gps;
+      if(loc&&typeof loc==="object"){la=parseFloat(loc.lat??loc.latitude??loc[0]);lo=parseFloat(loc.lng??loc.lon??loc.longitude??loc[1])}
+      if(!okLL(la,lo))for(const v of Object.values(o))if(typeof v==="string"){const m=v.match(NUMRE);if(m&&okLL(+m[1],+m[2])){la=+m[1];lo=+m[2];break}}
+    }
+    if(okLL(la,lo)){
+      const num=pick(o,["numero","número","num","n","no","id","codigo"]);
+      const nm=pick(o,["nombre","name","negocio","cliente","titulo","razon","direccion","dirección"]);
+      const key=la.toFixed(5)+","+lo.toFixed(5);
+      if(!seen.has(key)){seen.add(key);found.push({num:num!=null?String(num):"",nm:nm?String(nm):"Cliente",la,lo})}
+      return;
+    }
+    Object.values(o).forEach(v=>walk(v,depth+1));
+  };
+  try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith("cr_"))continue;
+    let v;try{v=JSON.parse(localStorage.getItem(k))}catch(e){continue}walk(v,0)}}catch(e){}
+  return found;
+}
+async function renderClients(){
+  const box=$("cli");
+  if(!clients.length){box.innerHTML="";return}
+  box.innerHTML='<div class="msg">Consultando el clima de sus clientes…</div>';
+  // agrupa clientes cercanos (~2 km) para no pedir uno por uno
+  const cells=new Map();
+  clients.forEach((c,i)=>{const k=(Math.round(c.la/0.02)*0.02).toFixed(2)+","+(Math.round(c.lo/0.02)*0.02).toFixed(2);if(!cells.has(k))cells.set(k,[]);cells.get(k).push(i)});
+  const keys=[...cells.keys()];
+  try{
+    const res=await multi(keys.map(k=>k.split(",").map(Number)));
+    const info=[];
+    keys.forEach((k,j)=>{const {H,i0}=res[j];const p3=Math.max(...H.precipitation_probability.slice(i0,i0+3).map(v=>v??0));
+      const lbl=x=>hourLabel(H.time[i0+x]);
+      cells.get(k).forEach(i=>{const o=obsAt(sabCache,clients[i].la,clients[i].lo);const now=o?o.raining:false;
+        const t=timing(H,i0,now);info[i]={p3,t,lbl,now,wet:now||(t.s>=0&&t.s<3)}})});
+    const sortN=(a,b)=>(parseFloat(clients[a].num)||1e9)-(parseFloat(clients[b].num)||1e9);
+    const idx=clients.map((_,i)=>i).sort(sortN);
+    const wet=idx.filter(i=>info[i].wet),dry=idx.filter(i=>!info[i].wet);
+    const row=i=>{const c=clients[i],f=info[i],t=f.t;
+      const w=f.now?("Lloviendo ya"+(t.e<0?"":" · escampa "+f.lbl(t.e))):t.s<0?"Seco":t.s===0.5?"Seco ahora, puede caer en esta hora":("Agua desde las "+f.lbl(t.s)+(t.e<0?"":" · escampa "+f.lbl(t.e)));
+      return `<div class="row"><span class="dot ${f.wet?"si":t.s>=0?"quiza":"no"}"></span><div class="grow"><div class="nm">${c.num?esc(c.num)+". ":""}${esc(c.nm)}</div><div class="mut">${f.p3}% · ${w}</div></div></div>`};
+    box.innerHTML=`<div class="msg">${clients.length} clientes con ubicación.</div>`+
+      `<h3 style="margin:8px 0">☔ Con agua en las próximas 3 horas (${wet.length})</h3>`+(wet.length?`<div class="mut">Mejor déjelos para después, si puede.</div>`+wet.map(row).join(""):'<div class="msg">Ninguno. ¡Buen momento para hacer la ruta!</div>')+
+      `<details><summary>✅ Secos por ahora (${dry.length})</summary>${dry.map(row).join("")}</details>`;
+  }catch(e){box.innerHTML='<div class="msg err">No se pudo consultar el clima de los clientes.</div>'}
+}
+$("impBtn").onclick=()=>{
+  const f=findClients();
+  if(!f.length){$("cli").innerHTML='<div class="msg">No encontré clientes con ubicación de Mi Ruta del Día en este celular. Esto funciona cuando Mi Ruta del Día está abierta desde la misma cuenta de GitHub (raulsimi1985-dev.github.io) y ya tiene ubicaciones guardadas.</div>';return}
+  clients=f;save("cr_clients",clients);renderClients();
+};
+
+// ---------- general ----------
+async function refresh(){
+  $("upd").textContent="Actualizando…";
+  try{
+    let name="Donde está usted",lat,lon;
+    let gps=true;
+    try{[lat,lon]=await getPos();here=[lat,lon]}catch(e){gps=false;const p=places[0]||ZONES[0];name=p[0]+" (sin GPS)";[lat,lon]=[p[1],p[2]]}
+    if(gps){$("where").textContent="📍 Buscando el nombre del barrio…";
+      placeName(lat,lon).then(t=>{const txt=t?"📍 Usted está en: "+t:`📍 Usted está en: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;$("where").textContent=txt;$("mPlace").textContent=t||"Donde está usted"})}
+    else $("where").innerHTML='<span class="err">📍 No pude leer su GPS. Revise que la ubicación del celular esté prendida y que la app tenga permiso.</span>';
+    const [f,st]=await Promise.all([forecast(lat,lon),sab().catch(()=>null)]);
+    const obs=obsAt(st,lat,lon);
+    renderObs(obs,st);drawStations(st);
+    lastF={name,f,lat,lon};
+    const a=renderHere(name,f,obs);alertIf("su ubicación",a);
+    setMe();
+    loadGrid();
+    const rs=await renderRoute();rs.forEach(r=>r&&alertIf(r.name,r.a));
+    renderClients();
+    $("upd").textContent="Actualizado a las "+new Date().toLocaleTimeString("es-CO",{hour:"numeric",minute:"2-digit"});
+  }catch(e){$("upd").innerHTML='<span class="err">No hay conexión o falló la consulta. Intente de nuevo.</span>'}
+}
+
+// cada 3 minutos revisa solo los pluviómetros (rápido) para avisar apenas empiece a llover
+let lastF=null;
+async function quickObs(){
+  if(!lastF||document.hidden)return;
+  try{sabT=0;const st=await sab();const o=obsAt(st,lastF.lat,lastF.lon);renderObs(o,st);drawStations(st);
+    const a=renderHere(lastF.name,lastF.f,o);alertIf("su ubicación",a)}catch(e){}
+}
+setInterval(quickObs,3*60*1000);
+
+let wake=null;
+async function motoOn(on){
+  $("moto").classList.toggle("on",on);save("cr_moto",on);
+  try{if(on&&navigator.wakeLock)wake=await navigator.wakeLock.request("screen");else if(wake){wake.release();wake=null}}catch(e){}
+}
+$("motoBtn").onclick=()=>motoOn(true);
+$("mExit").onclick=()=>motoOn(false);
+const talk=()=>{if(hereRes)speak(sayText(hereRes.name==="Donde está usted"?"donde está usted":hereRes.name,hereRes.a));else speak("Todavía estoy cargando el clima, parcero.")};
+$("talk").onclick=talk;$("mTalk").onclick=talk;
+$("voiceChk").onchange=e=>{voiceOn=e.target.checked;save("cr_voice",voiceOn);if(voiceOn)speak("Listo, le aviso en voz alta.")};
+$("slider").oninput=drawGrid;
+$("radarChk").onchange=e=>radar(e.target.checked);
+$("addZone").onclick=()=>{const z=ZONES[$("zoneSel").value];if(!places.some(p=>p[0]===z[0])){places.push(z);save("cr_places",places);renderRoute()}};
+$("addGps").onclick=async()=>{
+  try{const [la,lo]=await getPos();const n=$("gpsName").value.trim()||"Sitio "+(places.length+1);places.push([n,la,lo]);save("cr_places",places);$("gpsName").value="";renderRoute()}
+  catch(e){$("nMsg").textContent="No pude leer el GPS. Revise que la ubicación esté activada."}};
+$("route").onclick=e=>{const b=e.target.closest("[data-del]");if(b){places.splice(+b.dataset.del,1);save("cr_places",places);renderRoute()}};
+$("refresh").onclick=refresh;
+$("notif").onclick=async()=>{
+  if(!("Notification"in window)){$("nMsg").textContent="Este navegador no deja notificaciones; igual le vibra y le habla con la app abierta.";return}
+  const r=await Notification.requestPermission();
+  $("nMsg").textContent=r==="granted"?"Listo, notificaciones activadas.":"No dio permiso; puede activarlo en los ajustes del navegador."};
+
+if(load("cr_moto",false))motoOn(true);
+if("speechSynthesis"in window)speechSynthesis.getVoices();
+if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+refresh();
+setInterval(refresh,15*60*1000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden){refresh();if($("moto").classList.contains("on"))motoOn(true)}});
+}
+</script>
+</body>
+</html>
